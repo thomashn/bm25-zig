@@ -1,0 +1,17 @@
+.{
+    .name = .bm25,
+    .version = "1.0.0",
+    .fingerprint = 0x4ba728b538f97e7e,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .chilli = .{
+            .url = "https://github.com/CogitatorTech/chilli/archive/main.tar.gz",
+            .hash = "chilli-0.3.1-c19PrjizAQByQrJlXzEb8SrMY6cDJyWaZ9FnxFfN0kYl",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
