@@ -12,7 +12,7 @@ threaded.
 
 ## Features
 
-- **Streaming Iterator Interface**: `DocIter` and `WordIter` abstractions allow indexing large corpora loading files all at once.
+- **Streaming Iterator Interface**: `DocIter` and `WordIter` abstractions allow indexing large corpora without loading files all at once.
 - **Low-Allocation Scoring**: Scoring allocates a single return slice for scores, with zero dynamic allocations inside the core loop.
 - **Implementation Parity**: Offers the same algorithms, defaults and scoring output as the `rank_bm25` library.
 - **Zero Third-Party Dependencies**: Written entirely in `Zig`.
