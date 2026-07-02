@@ -493,6 +493,68 @@ pub const BM25Plus = struct {
     }
 };
 
+/// Erases any pointer to a type-safe custom struct with a `next() !?[]const u8`
+/// method into a standard `WordIter`.
+pub fn wordIterator(ptr: anytype) WordIter {
+    const T = @TypeOf(ptr);
+    const Gen = struct {
+        fn next(base: WordIter) anyerror!?[]const u8 {
+            const self: T = @ptrCast(@alignCast(base.ctx));
+            return self.next();
+        }
+    };
+    return WordIter{
+        .ctx = ptr,
+        .nextFn = Gen.next,
+    };
+}
+
+/// Erases any pointer to a type-safe custom struct with a `next() !?WordIter`
+/// method into a standard `DocIter`.
+pub fn docIterator(ptr: anytype) DocIter {
+    const T = @TypeOf(ptr);
+    const Gen = struct {
+        fn next(base: DocIter) anyerror!?WordIter {
+            const self: T = @ptrCast(@alignCast(base.ctx));
+            return self.next();
+        }
+    };
+    return DocIter{
+        .ctx = ptr,
+        .nextFn = Gen.next,
+    };
+}
+
+/// A generic, stateful document iterator over an in-memory slice of documents.
+/// It uses a custom `Tokenizer` to transform each document of type `Doc` into words.
+pub fn SliceIterator(comptime Doc: type, comptime Tokenizer: type) type {
+    return struct {
+        const Self = @This();
+
+        corpus: []const Doc,
+        idx: usize = 0,
+        current_tokenizer: Tokenizer = undefined,
+
+        pub fn init(corpus: []const Doc) Self {
+            return .{ .corpus = corpus };
+        }
+
+        pub fn next(self: *Self) anyerror!?WordIter {
+            if (self.idx >= self.corpus.len) return null;
+
+            const doc = self.corpus[self.idx];
+            self.idx += 1;
+
+            self.current_tokenizer = Tokenizer.init(doc);
+            return wordIterator(&self.current_tokenizer);
+        }
+
+        pub fn iterator(self: *Self) DocIter {
+            return docIterator(self);
+        }
+    };
+}
+
 const WordTokenizer = struct {
     split_iter: std.mem.SplitIterator(u8, .any),
 
@@ -500,35 +562,12 @@ const WordTokenizer = struct {
         return .{ .split_iter = std.mem.splitAny(u8, doc, " ") };
     }
 
-    fn next(base: WordIter) !?[]const u8 {
-        const self: *WordTokenizer = @ptrCast(@alignCast(base.ctx));
+    fn next(self: *WordTokenizer) !?[]const u8 {
         return self.split_iter.next();
     }
 
     pub fn iterator(self: *WordTokenizer) WordIter {
-        return WordIter{ .ctx = self, .nextFn = WordTokenizer.next };
-    }
-};
-
-const CorpusTokenizer = struct {
-    corpus_idx: usize = 0,
-    corpus: []const []const u8,
-    word_tokenizer: ?WordTokenizer = null,
-
-    pub fn init(corpus: []const []const u8) CorpusTokenizer {
-        return CorpusTokenizer{ .corpus = corpus };
-    }
-
-    fn next(base: DocIter) !?WordIter {
-        const self: *CorpusTokenizer = @ptrCast(@alignCast(base.ctx));
-        if (self.corpus_idx >= self.corpus.len) return null;
-        self.word_tokenizer = .init(self.corpus[self.corpus_idx]);
-        self.corpus_idx += 1;
-        return self.word_tokenizer.?.iterator();
-    }
-
-    pub fn iterator(self: *CorpusTokenizer) DocIter {
-        return DocIter{ .ctx = self, .nextFn = CorpusTokenizer.next };
+        return wordIterator(self);
     }
 };
 
@@ -633,7 +672,7 @@ const score_matrix: []const []const []const f64 = &.{
 test "score_matrix" {
     const algorithms = .{ BM25Okapi, BM25L, BM25Plus };
     inline for (algorithms, 0..) |Algorithm, alg_idx| {
-        var corpus_iter = CorpusTokenizer.init(test_corpus);
+        var corpus_iter = SliceIterator([]const u8, WordTokenizer).init(test_corpus);
         var alg = try Algorithm.init(std.testing.allocator, corpus_iter.iterator(), .{});
         defer alg.deinit();
 
