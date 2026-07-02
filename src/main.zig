@@ -30,7 +30,7 @@ const DocEntry = struct {
     score: f64 = 0,
 };
 
-const WordTokenizer = struct {
+pub const WordTokenizer = struct {
     file_content: []const u8,
     file_seek: usize = 0,
     word_scratch: [126]u8 = undefined,

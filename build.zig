@@ -61,4 +61,25 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
+
+    const benchmark_exe = b.addExecutable(.{
+        .name = "benchmark",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/benchmark.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "bm25", .module = mod },
+            },
+        }),
+    });
+
+    b.installArtifact(benchmark_exe);
+
+    const benchmark_step = b.step("benchmark", "Run indexing benchmark");
+    const run_benchmark_cmd = b.addRunArtifact(benchmark_exe);
+    benchmark_step.dependOn(&run_benchmark_cmd.step);
+    if (b.args) |args| {
+        run_benchmark_cmd.addArgs(args);
+    }
 }
