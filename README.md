@@ -1,16 +1,160 @@
 # BM25-Zig
+[![Zig Version](https://img.shields.io/badge/Zig-0.16.0-orange.svg?logo=zig)](https://ziglang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Implementation of the BM25 search ranking algorithms in
 [Zig](https://ziglang.org/). Inspired by the popular
 [Python](https://www.python.org/) library
 [rank_bm25](https://github.com/dorianbrown/rank_bm25).
-It has the same scoring logic and a similar interface.
 
-I have attempted to keep it as performant as I'm able to,
-but there are still improvements to be made. It is single
-threaded, but seems to be relatively fast.
+Implements the following algorithms:
+- **OkapiBM25** (`BM25Okapi`)
+- **BM25L** (`BM25L`)
+- **BM25+** (`BM25Plus`)
+
+Has some nice features:
+- **Streaming**: Indexing relies on iterators, which allows for indexing of huge corpora.
+- **Low-Allocation Scoring**: Only the returned scores array requires an allocator.
+- **Similar interface**: Offers the same algorithms, defaults and scoring output as the `rank_bm25` library.
+- **No dependencies**: Written entirely in `Zig` with no third party libraries in the module.
+- **Reference implementation**: It has a CLI which allows indexing and search in directory.
+
+## Install
+First, add `bm25` to your package dependencies in `build.zig.zon` by fetching the library:
+```sh
+zig fetch --save git+https://github.com/thomashn/bm25-zig#v1.0.0
+```
+Next, expose the module to your target in `build.zig`:
+```zig
+const bm25_dep = b.dependency("bm25", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+// Import the module into your executable/library root module
+your_compilation.root_module.addImport("bm25", bm25_dep.module("bm25"));
+```
+## Example usage
+The user needs to provide a basic tokenizer which exposes a **next** function.
+```zig
+const std = @import("std");
+const bm25 = @import("bm25");
+
+const WordTokenizer = struct {
+    split_iter: std.mem.SplitIterator(u8, .any),
+
+    pub fn init(doc: []const u8) WordTokenizer {
+        return .{ .split_iter = std.mem.splitAny(u8, doc, " ") };
+    }
+
+    fn next(self: *WordTokenizer) !?[]const u8 {
+        return self.split_iter.next();
+    }
+
+    // Utility function for query tokenization
+    pub fn iterator(self: *WordTokenizer) bm25.WordIter {
+        return bm25.wordIterator(self);
+    }
+};
+
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa.allocator();
+
+    // Simple use cases will likely involve a slice of some kind,
+    // therefore the module provides a SliceIterator function for convenience.
+    const corpus = &[_][]const u8{
+        "cherry pie",
+        "apple tart",
+        "fish chips",
+    };
+    var corpus_iter = bm25.SliceIterator([]const u8, WordTokenizer).init(corpus);
+
+    // Initialize your preferred version of BM25.
+    var ranker = try bm25.BM25Okapi.init(allocator, corpus_iter.iterator(), .{});
+    defer ranker.deinit();
+
+    // Searches should go through the same tokenizer as the indexing
+    const query = "cherry pie";
+    var query_tokenizer = WordTokenizer.init(query);
+    const scores = try ranker.getScores(allocator, query_tokenizer.iterator());
+    defer allocator.free(scores);
+
+    for (scores, 0..) |score, idx| {
+        std.debug.print("idx: {}, score: {d}\n", .{ idx, score });
+    }
+}
+```
+## Command line
+In order to ensure the module interface made sense and that
+the algorithm was performant, I created a reference implementation
+in the form of a CLI tool that can index all files in a directory
+and output a score.
+```bash
+zig build -Doptimize=ReleaseFast -- ~/some/folder 'hello world'
+```
+To get proper speed, build with `-Doptimize=ReleaseFast`, or else you might
+get slowed down by memory poison detection.
+
+I would recommend using the CLI code as a reference when
+attempting to build more complicated/streaming tokenizers.
+The code is located in [src/main.zig](src/main.zig).
+
+## Running Tests
+Test cases are run against the output of `rank_bm25` in order to
+verify the implementation. The example text is also taken from
+`rank_bm25`.
+```bash
+zig build test
+```
+
+## Getting started
+
+```zig
+const std = @import("std");
+const bm25 = @import("bm25");
+
+const WordTokenizer = struct {
+    split_iter: std.mem.SplitIterator(u8, .any),
+
+    pub fn init(doc: []const u8) WordTokenizer {
+        return .{ .split_iter = std.mem.splitAny(u8, doc, " ") };
+    }
+
+    fn next(self: *WordTokenizer) !?[]const u8 {
+        return self.split_iter.next();
+    }
+
+    pub fn iterator(self: *WordTokenizer) bm25.WordIter {
+        return bm25.wordIterator(self);
+    }
+};
+
+// Simple use cases will likely involve a slice of some kind,
+// therefore the module provides a SliceIterator function for convenience.
+const corpus = &[_][]const u8{
+    "cherry pie",
+    "apple tart",
+    "fish chips",
+};
+var corpus_iter = SliceIterator([]const u8, MyWhitespaceTokenizer).init(corpus);
+
+// Initialize your preferred version of BM25.
+var ranker = try bm25.BM25Okapi.init(allocator, corpus_iter.iterator(), .{});
+defer ranker.deinit();
+
+// Searches should go through the same tokenizer as the indexing
+const query = "cherry pie";
+var query_tokenizer = MyWhitespaceTokenizer.init(query);
+const scores = try ranker.getScores(allocator, query_tokenizer.iterator());
+defer allocator.free(scores);
+
+try std.testing.expect(scores[0] > scores[1]);
+```
 
 ## Performance
+I attempt to keep it as performant as I can. It seems to
+be relatively fast at this point.
+
 Here is a quick benchmark of indexing a folder on my machine:
 ```txt
 Loaded 68089 documents (1016.88 MB) from disk in 1675.00 ms (607.09 MB/s)
@@ -38,51 +182,35 @@ Benchmarking script is in [src/benchmark.zig](src/benchmark.zig). The folder
 which was indexed contains mostly software projects, some small and some
 large.
 
-## Features
+> [!TIP]
+> Based on my experience, so far, tokenizer performance is very
+> important to the overall indexing time, so keep that in mind if
+> you feel indexing is slow.
 
-- **Streaming Iterator Interface**: `DocIter` and `WordIter` abstractions allow indexing large corpora without loading files all at once.
-- **Low-Allocation Scoring**: Scoring allocates a single return slice for scores, with zero dynamic allocations inside the core loop.
-- **Implementation Parity**: Offers the same algorithms, defaults and scoring output as the `rank_bm25` library.
-- **Zero Third-Party Dependencies**: Written entirely in `Zig`.
+## Custom tokenizers
+Predicting tokenizer use-cases is really difficult. Therefore,
+I've opted to avoid providing ready made tokenizers, and instead
+provide a minimum helper in the form of the [SliceIterator](src/root.zig),
+[docIterator](src/root.zig) and [wordIterator](src/root.zig) factories.
 
-## Implemented Algorithms
-- **OkapiBM25** (`BM25Okapi`)
-- **BM25L** (`BM25L`)
-- **BM25+** (`BM25Plus`)
+But, as the corpus expands, you will need a more efficient way
+to index huge corpuses. This requires the ability to stream the data
+you are indexing on. In [src/main.zig](src/main.zig) the code reads
+through all relevant files in a directory, but only holds on to the
+data of a couple of files at once, avoiding the huge memory consumption
+of a slice based approach.
 
-## Install
+Creating your own iterator actually requires the creation of two iterators;
+**DocIter** and **WordIter**. The former is responsible for
+iterating over each document. In the CLI, this is responsible for
+reading the files. For each file it will spawn the word iterator,
+responsible for presenting words to the indexer.
 
-First, add `bm25` to your package dependencies in `build.zig.zon` by fetching the library:
-
-```sh
-zig fetch --save git+https://github.com/thomashn/bm25-zig#v1.0.0
-```
-
-Next, expose the module to your target in `build.zig`:
-
-```zig
-const bm25_dep = b.dependency("bm25", .{
-    .target = target,
-    .optimize = optimize,
-});
-
-// Import the module into your executable/library root module
-your_compilation.root_module.addImport("bm25", bm25_dep.module("bm25"));
-```
-
-## Example usage
-
-Here is BM25 indexing, using a tokenizers on an in-memory corpus. The
-usage of iterators might seem a bit daunting, but I think any serious
-usage would require them eventually, both for performance and
-flexibility. You are expected to copy and paste these tokenizers and
-modify them for your own use case.
-
+Here is an expanded example of the one above, implementing a full tokenizer
+pipeline:
 ```zig
 const std = @import("std");
 const bm25 = @import("bm25");
-const WordIter = bm25.WordIter;
-const DocIter = bm25.DocIter;
 
 const WordTokenizer = struct {
     split_iter: std.mem.SplitIterator(u8, .any),
@@ -91,101 +219,58 @@ const WordTokenizer = struct {
         return .{ .split_iter = std.mem.splitAny(u8, doc, " ") };
     }
 
-    fn next(base: WordIter) !?[]const u8 {
-        const self: *WordTokenizer = @ptrCast(@alignCast(base.ctx));
+    fn next(self: *WordTokenizer) !?[]const u8 {
         return self.split_iter.next();
     }
 
-    pub fn iterator(self: *WordTokenizer) WordIter {
-        return WordIter{ .ctx = self, .nextFn = WordTokenizer.next };
+    pub fn iterator(self: *WordTokenizer) bm25.WordIter {
+        return bm25.wordIterator(self);
     }
 };
 
 const CorpusTokenizer = struct {
     corpus_idx: usize = 0,
     corpus: []const []const u8,
-    word_tokenizer: ?WordTokenizer = null,
+    word_tokenizer: WordTokenizer = undefined,
 
     pub fn init(corpus: []const []const u8) CorpusTokenizer {
         return CorpusTokenizer{ .corpus = corpus };
     }
 
-    fn next(base: DocIter) !?WordIter {
-        const self: *CorpusTokenizer = @ptrCast(@alignCast(base.ctx));
+    fn next(self: *CorpusTokenizer) !?bm25.WordIter {
         if (self.corpus_idx >= self.corpus.len) return null;
         self.word_tokenizer = .init(self.corpus[self.corpus_idx]);
         self.corpus_idx += 1;
-        return self.word_tokenizer.?.iterator();
+        return self.word_tokenizer.iterator();
     }
 
-    pub fn iterator(self: *CorpusTokenizer) DocIter {
-        return DocIter{ .ctx = self, .nextFn = CorpusTokenizer.next };
+    pub fn iterator(self: *CorpusTokenizer) bm25.DocIter {
+        return bm25.docIterator(self);
     }
 };
 
 pub fn main(init: std.process.Init) !void {
-    const gpa = init.gpa;
-    const allocator = gpa.allocator();
+    const allocator = init.gpa.allocator();
 
     const corpus: []const []const u8 = &.{
-        "Hello there good man!",
-        "It is quite windy in London",
-        "How is the weather today?",
+        "cherry pie",
+        "apple tart",
+        "fish chips",
     };
     var corpus_tokenizer = CorpusTokenizer.init(corpus);
     var alg = try bm25.BM25Okapi.init(allocator, corpus_tokenizer.iterator(), .{});
     defer alg.deinit();
 
-    const query = "windy london";
+    const query = "cherry pie";
     var query_tokenizer = WordTokenizer.init(query);
     const scores = try alg.getScores(allocator, query_tokenizer.iterator());
     defer allocator.free(scores);
 
-    std.debug.print("Scores: {any}\n", .{scores});
+    for (scores, 0..) |score, idx| {
+        std.debug.print("idx: {}, score: {d}\n", .{ idx, score });
+    }
 }
 ```
-
-## Implementing tokenizers
-
-The above example uses the same tokenizers that are used in unittests, a more
-realistic implementation can be found in the cli tool under [src/main.zig](src/main.zig).
-Predicting tokenizer usage is impossible, so users are required to
-implement their own, these examples are a good starting point.
-
-In the above example, obvious improvements to the WordTokenizer
-and DocTokenizer would be introduction of case insensitive
-tokenization and reading from a file instead of an in memory
-structure.
-
-Based on my experience, so far, tokenizers performance is very
-important to the overall indexing time, so keep that in mind if
-you feel indexing is slow.
-
-## Command line tool
-
-You can build a command line tool that can index all files in a directory
-and output a score.
-```bash
-zig build -Doptimize=ReleaseFast
-./zig-out/bin/bm25 ~/some/folder 'hello world'
-```
-To get propper speed, build with `-Doptimize=ReleaseFast`, or else you might
-get slowed down by memory poison detection. Also, this is a
-toy program I made to polish the interface, so there is still performance
-left on the table. I think tokenization could easily be made multi-threaded,
-and that the exclude logic could be made to work like ripgrep and
-so on.
-
-## Running Tests
-
-Test cases are run against the output of `rank_bm25` in order to
-verify the implementation. The example text is also taken from
-`rank_bm25`.
-
-```sh
-zig build test
-```
-
 ## Credits
 
 * **[rank_bm25](https://github.com/dorianbrown/rank_bm25)** - The popular Python implementation on which the scoring algorithms, parameter defaults, and verification test cases in this project are based.
