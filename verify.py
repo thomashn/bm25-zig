@@ -27,10 +27,10 @@ test_corpus: List[str] = [
 
 
 query_matrix = [
-    ["Hello", "World"],
-    ["Windy", "weather"],
-    ["is", "today?"],
-    ["is", "today?", "good"],
+    "Hello World",
+    "Windy weather",
+    "is today?",
+    "is today? good",
 ]
 
 
@@ -39,8 +39,7 @@ def gen_zig_score_matrix():
 
     print("const query_matrix: []const []const []const u8 = &.{")
     for query in query_matrix:
-        temp = ", ".join([f'"{q}"' for q in query])
-        print(f'\t.{{ {temp} }},')
+        print(f'\t{query},')
     print("};")
     print("")
     print("const score_matrix : []const []const []const f64 = &.{" )
@@ -49,7 +48,7 @@ def gen_zig_score_matrix():
         print(f"\t\t// {Algorithm.__name__}")
         alg = Algorithm(test_corpus, tokenizer)
         for query in query_matrix:
-            scores = alg.get_scores(query)
+            scores = alg.get_scores(query.split(" "))
             print("\t\t&.{")
             print(f"\t\t\t// {query}")
             for score in scores:
