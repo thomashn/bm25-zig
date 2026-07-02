@@ -7,8 +7,36 @@ Implementation of the BM25 search ranking algorithms in
 It has the same scoring logic and a similar interface.
 
 I have attempted to keep it as performant as I'm able to,
-but there are probably many improvements still. It is single
-threaded.
+but there are still improvements to be made. It is single
+threaded, but seems to be relatively fast.
+
+## Performance
+Here is a quick benchmark of indexing a folder on my machine:
+```txt
+Loaded 68089 documents (1016.88 MB) from disk in 1675.00 ms (607.09 MB/s)
+
+=== BM25 Okapi Indexing Benchmark Results ===
+Total Docs:            68089
+Total Size:            1016.88 MB
+Total Tokens (Words):  135402821
+Unique Words (Vocab):  1058574
+Pure Indexing Time:    11235.00 ms
+Pure Indexing Speed:   90.51 MB/s
+Throughput (Docs/sec): 6060.44 docs/s
+Throughput (Toks/sec): 12051875.48 tokens/s
+=============================================
+```
+The benchmark above was executed with the following hardware specifications:
+| Component | Specification |
+| :--- | :--- |
+| **CPU** | AMD Ryzen 7 5700X3D (8 Cores / 16 Threads) |
+| **Memory** | 48 GB (46 GiB) RAM |
+| **Storage** | Kingston NV1 1TB NVMe PCIe SSD (`KINGSTON SNVS1000G`) |
+| **OS** | Linux |
+
+Benchmarking script is in [src/benchmark.zig](src/benchmark.zig). The folder
+which was indexed contains mostly software projects, some small and some
+large.
 
 ## Features
 
