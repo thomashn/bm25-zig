@@ -41,6 +41,78 @@ fn getScoresGeneric(self: anytype, allocator: std.mem.Allocator, query: WordIter
     return score;
 }
 
+fn getBatchScoresGeneric(self: anytype, allocator: std.mem.Allocator, query: WordIter, doc_ids: []const usize) ![]f64 {
+    const T = @TypeOf(self.*);
+    const parent: *BM25 = &self.bm25;
+
+    // Subset/Batch search mode: Query document IDs might be out of order or sparse,
+    // so we use binary search on word_stats (which is sorted by doc_id).
+    var score = try allocator.alloc(f64, doc_ids.len);
+    errdefer allocator.free(score);
+    @memset(score, 0);
+
+    while (try query.next()) |w| {
+        const word_id: u32 = parent.word_to_id.get(w) orelse continue;
+        const idf: f64 = parent.idf.get(word_id) orelse continue;
+        const word_stats = parent.doc_freqs.get(word_id) orelse continue;
+
+        for (doc_ids, 0..) |doc_idx, i| {
+            var q_freq: f64 = 0;
+            var left: usize = 0;
+            var right: usize = word_stats.len;
+            while (left < right) {
+                const mid = left + (right + left) / 2;
+                if (word_stats[mid].doc_id == doc_idx) {
+                    q_freq = word_stats[mid].freq;
+                    break;
+                } else if (word_stats[mid].doc_id < doc_idx) {
+                    left = mid + 1;
+                } else {
+                    right = mid;
+                }
+            }
+            const doc_len = parent.doc_len.items[doc_idx];
+            score[i] += T.scoreFormula(self.param, q_freq, doc_len, parent.avgdl, idf);
+        }
+    }
+    return score;
+}
+
+fn getTopNGeneric(self: anytype, allocator: std.mem.Allocator, query: WordIter, documents: anytype, n: usize) ![]const @TypeOf(documents[0]) {
+    const T = @TypeOf(documents[0]);
+    std.debug.assert(self.bm25.corpus_size == documents.len);
+
+    const scores = try self.getScores(allocator, query);
+    defer allocator.free(scores);
+
+    const Entry = struct {
+        item: T,
+        score: f64,
+    };
+
+    var entries = try allocator.alloc(Entry, documents.len);
+    defer allocator.free(entries);
+
+    for (documents, 0..) |doc, i| {
+        entries[i] = .{ .item = doc, .score = scores[i] };
+    }
+
+    const SortFn = struct {
+        pub fn sort(_: void, a: Entry, b: Entry) bool {
+            return a.score > b.score;
+        }
+    }.sort;
+
+    std.mem.sortUnstable(Entry, entries, {}, SortFn);
+
+    const count = @min(n, documents.len);
+    const result = try allocator.alloc(T, count);
+    for (0..count) |i| {
+        result[i] = entries[i].item;
+    }
+    return result;
+}
+
 pub const DocIter = struct {
     ctx: *anyopaque,
     nextFn: *const fn (DocIter) anyerror!?WordIter,
@@ -290,6 +362,14 @@ pub const BM25Okapi = struct {
         return getScoresGeneric(self, allocator, query);
     }
 
+    pub fn getBatchScores(self: *Self, allocator: std.mem.Allocator, query: WordIter, doc_ids: []const usize) ![]f64 {
+        return getBatchScoresGeneric(self, allocator, query, doc_ids);
+    }
+
+    pub fn getTopN(self: *Self, allocator: std.mem.Allocator, query: WordIter, documents: anytype, n: usize) ![]const @TypeOf(documents[0]) {
+        return getTopNGeneric(self, allocator, query, documents, n);
+    }
+
     pub fn deinit(self: *Self) void {
         self.bm25.deinit();
     }
@@ -341,6 +421,14 @@ pub const BM25L = struct {
         return getScoresGeneric(self, allocator, query);
     }
 
+    pub fn getBatchScores(self: *Self, allocator: std.mem.Allocator, query: WordIter, doc_ids: []const usize) ![]f64 {
+        return getBatchScoresGeneric(self, allocator, query, doc_ids);
+    }
+
+    pub fn getTopN(self: *Self, allocator: std.mem.Allocator, query: WordIter, documents: anytype, n: usize) ![]const @TypeOf(documents[0]) {
+        return getTopNGeneric(self, allocator, query, documents, n);
+    }
+
     pub fn deinit(self: *Self) void {
         self.bm25.deinit();
     }
@@ -390,6 +478,14 @@ pub const BM25Plus = struct {
 
     pub fn getScores(self: *Self, allocator: std.mem.Allocator, query: WordIter) ![]f64 {
         return getScoresGeneric(self, allocator, query);
+    }
+
+    pub fn getBatchScores(self: *Self, allocator: std.mem.Allocator, query: WordIter, doc_ids: []const usize) ![]f64 {
+        return getBatchScoresGeneric(self, allocator, query, doc_ids);
+    }
+
+    pub fn getTopN(self: *Self, allocator: std.mem.Allocator, query: WordIter, documents: anytype, n: usize) ![]const @TypeOf(documents[0]) {
+        return getTopNGeneric(self, allocator, query, documents, n);
     }
 
     pub fn deinit(self: *Self) void {
@@ -553,6 +649,24 @@ test "score_matrix" {
             for (score_matrix[alg_idx][query_idx], 0..) |expected_score, i| {
                 try std.testing.expectEqual(expected_score, scores[i]);
             }
+
+            // Test batch scores with a subset/reordered index: [2, 0]
+            const batch_indices = [_]usize{ 2, 0 };
+            query_tokenizer = WordTokenizer.init(query);
+            const batch_scores = try alg.getBatchScores(std.testing.allocator, query_tokenizer.iterator(), &batch_indices);
+            defer std.testing.allocator.free(batch_scores);
+
+            try std.testing.expectEqual(score_matrix[alg_idx][query_idx][2], batch_scores[0]);
+            try std.testing.expectEqual(score_matrix[alg_idx][query_idx][0], batch_scores[1]);
         }
+
+        // Test getTopN on "is today?" (query_matrix[2])
+        var top_n_tokenizer = WordTokenizer.init(query_matrix[2]);
+        const top_n = try alg.getTopN(std.testing.allocator, top_n_tokenizer.iterator(), test_corpus, 2);
+        defer std.testing.allocator.free(top_n);
+
+        try std.testing.expectEqual(2, top_n.len);
+        try std.testing.expectEqualStrings(test_corpus[2], top_n[0]);
+        try std.testing.expectEqualStrings(test_corpus[1], top_n[1]);
     }
 }
