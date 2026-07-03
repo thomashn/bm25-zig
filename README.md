@@ -106,51 +106,6 @@ verify the implementation. The example text is also taken from
 ```bash
 zig build test
 ```
-
-## Getting started
-
-```zig
-const std = @import("std");
-const bm25 = @import("bm25");
-
-const WordTokenizer = struct {
-    split_iter: std.mem.SplitIterator(u8, .any),
-
-    pub fn init(doc: []const u8) WordTokenizer {
-        return .{ .split_iter = std.mem.splitAny(u8, doc, " ") };
-    }
-
-    fn next(self: *WordTokenizer) !?[]const u8 {
-        return self.split_iter.next();
-    }
-
-    pub fn iterator(self: *WordTokenizer) bm25.WordIter {
-        return bm25.wordIterator(self);
-    }
-};
-
-// Simple use cases will likely involve a slice of some kind,
-// therefore the module provides a SliceIterator function for convenience.
-const corpus = &[_][]const u8{
-    "cherry pie",
-    "apple tart",
-    "fish chips",
-};
-var corpus_iter = SliceIterator([]const u8, MyWhitespaceTokenizer).init(corpus);
-
-// Initialize your preferred version of BM25.
-var ranker = try bm25.BM25Okapi.init(allocator, corpus_iter.iterator(), .{});
-defer ranker.deinit();
-
-// Searches should go through the same tokenizer as the indexing
-const query = "cherry pie";
-var query_tokenizer = MyWhitespaceTokenizer.init(query);
-const scores = try ranker.getScores(allocator, query_tokenizer.iterator());
-defer allocator.free(scores);
-
-try std.testing.expect(scores[0] > scores[1]);
-```
-
 ## Performance
 I attempt to keep it as performant as I can. It seems to
 be relatively fast at this point.
