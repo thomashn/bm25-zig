@@ -22,7 +22,7 @@ Has some nice features:
 ## Install
 First, add `bm25` to your package dependencies in `build.zig.zon` by fetching the library:
 ```sh
-zig fetch --save git+https://github.com/thomashn/bm25-zig#v1.0.0
+zig fetch --save git+https://github.com/thomashn/bm25-zig#v1.1.0
 ```
 Next, expose the module to your target in `build.zig`:
 ```zig

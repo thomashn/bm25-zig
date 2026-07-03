@@ -316,7 +316,7 @@ pub fn main(init: std.process.Init) anyerror!void {
     var root_cmd = try chilli.Command.init(init.gpa, .{
         .name = "bm25",
         .description = "A high-performance command-line search utility that ranks local documents using the BM25 Okapi relevance scoring algorithm.",
-        .version = "v1.0.0",
+        .version = "v1.1.0",
         .exec = cli, // The function to run
     });
     defer root_cmd.deinit();
