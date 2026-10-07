@@ -1,12 +1,12 @@
 .{
     .name = .bm25,
-    .version = "1.1.0",
+    .version = "2.0.0",
     .fingerprint = 0x4ba728b538f97e7e,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     .dependencies = .{
         .chilli = .{
-            .url = "https://github.com/CogitatorTech/chilli/archive/main.tar.gz",
-            .hash = "chilli-0.3.1-c19PrjizAQByQrJlXzEb8SrMY6cDJyWaZ9FnxFfN0kYl",
+            .url = "git+https://github.com/CogitatorTech/chilli.git#8dd62798ae241a79b63181ed0c78bc2474a3a69e",
+            .hash = "chilli-0.4.0-c19PrpzYAQAByfO0ayR5w2mpw8ncare-Lk6Uu0E8tjwf",
         },
     },
     .paths = .{

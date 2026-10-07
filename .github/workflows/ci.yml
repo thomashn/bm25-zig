@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: korandoru/setup-zig@v1.4.0
         with:
-          zig-version: 0.16.0
+          zig-version: 0.17.0
       - name: Check formatting
         run: zig fmt --check src/ build.zig
       - name: Test
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: korandoru/setup-zig@v1.4.0
         with:
-          zig-version: 0.16.0
+          zig-version: 0.17.0
       - name: Test
         run: zig build test
       - name: Test (ReleaseSafe)
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: korandoru/setup-zig@v1.4.0
         with:
-          zig-version: 0.16.0
+          zig-version: 0.17.0
       - name: Test
         run: zig build test
       - name: Test (ReleaseSafe)
