@@ -1,5 +1,5 @@
 # BM25-Zig
-[![Zig Version](https://img.shields.io/badge/Zig-0.16.0-orange.svg?logo=zig)](https://ziglang.org/)
+[![Zig Version](https://img.shields.io/badge/Zig-0.17.0-orange.svg?logo=zig)](https://ziglang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Implementation of the BM25 search ranking algorithms in
@@ -22,7 +22,7 @@ Has some nice features:
 ## Install
 First, add `bm25` to your package dependencies in `build.zig.zon` by fetching the library:
 ```sh
-zig fetch --save git+https://github.com/thomashn/bm25-zig#v1.1.0
+zig fetch --save git+https://github.com/thomashn/bm25-zig#v2.0.0
 ```
 Next, expose the module to your target in `build.zig`:
 ```zig

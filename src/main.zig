@@ -16,7 +16,7 @@ fn logFn(
     args: anytype,
 ) void {
     _ = scope;
-    if (@intFromEnum(message_level) > @intFromEnum(current_log_level)) return;
+    if (@backingInt(message_level) > @backingInt(current_log_level)) return;
 
     var stderr_buf: [2048]u8 = undefined;
     const fallback_io = std.Options.debug_io;
@@ -91,7 +91,7 @@ const DocTokenizer = struct {
     tasks: usize = 0,
     docs: usize = 0,
     read_task: ?*const ReadTask = null,
-    task_pool: std.heap.MemoryPoolExtra(ReadTask, .{ .growable = false }),
+    task_pool: std.heap.memory_pool.Extra(ReadTask, .{ .growable = false }),
     pub fn init(io: std.Io, allocator: std.mem.Allocator, dir: std.Io.Dir) !DocTokenizer {
 
         // Do an initial count
@@ -316,7 +316,7 @@ pub fn main(init: std.process.Init) anyerror!void {
     var root_cmd = try chilli.Command.init(init.gpa, .{
         .name = "bm25",
         .description = "A high-performance command-line search utility that ranks local documents using the BM25 Okapi relevance scoring algorithm.",
-        .version = "v1.1.0",
+        .version = "v2.0.0",
         .exec = cli, // The function to run
     });
     defer root_cmd.deinit();

@@ -41,10 +41,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     run_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     const mod_tests = b.addTest(.{
         .root_module = mod,
@@ -79,7 +76,5 @@ pub fn build(b: *std.Build) void {
     const benchmark_step = b.step("benchmark", "Run indexing benchmark");
     const run_benchmark_cmd = b.addRunArtifact(benchmark_exe);
     benchmark_step.dependOn(&run_benchmark_cmd.step);
-    if (b.args) |args| {
-        run_benchmark_cmd.addArgs(args);
-    }
+    run_benchmark_cmd.addPassthruArgs();
 }
